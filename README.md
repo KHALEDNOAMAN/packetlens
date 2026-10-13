@@ -1,7 +1,6 @@
 # PacketLens
 
-`index.html` is the whole UI (no build step, no external requests). `bridge.py` is the optional live-capture service.
-
+A modern responsive Network Packet Analyzer application that allows users to capture, inspect, analyze, and troubleshoot network traffic in real time.
 
 Offline analysis (Capture > Import PCAP/PCAPNG) works anywhere. Files are parsed in the tab and never uploaded.
 
