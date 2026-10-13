@@ -2,11 +2,6 @@
 
 `index.html` is the whole UI (no build step, no external requests). `bridge.py` is the optional live-capture service.
 
-## Host the UI
-
-- **Vercel:** put both files in a repo, import it, framework preset "Other". Or run `vercel --prod` in this folder.
-- **GitHub Pages:** push `index.html` to a repo, enable Pages on the branch.
-- **Local / Termux:** `python3 -m http.server 8000`, open `http://127.0.0.1:8000`.
 
 Offline analysis (Capture > Import PCAP/PCAPNG) works anywhere. Files are parsed in the tab and never uploaded.
 
