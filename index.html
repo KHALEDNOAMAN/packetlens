@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src http://127.0.0.1:* http://localhost:*; img-src data:">
+<title>PacketLens</title>
+<style>
+:root{--bg:#0b1220;--panel:#101a2e;--line:#1f2d4a;--text:#d6e0f2;--mute:#8091ae;--accent:#22d3ee;--ok:#34d399;--warn:#fbbf24;--bad:#f87171;--row:26px;--radius:6px;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;--cols:60px 96px 150px 64px 150px 64px 72px 60px 110px minmax(320px,1fr);color-scheme:dark}
+:root[data-theme=light]{--bg:#f3f6fb;--panel:#fff;--line:#d5dcea;--text:#16233b;--mute:#5b6b86;--accent:#0891b2;--ok:#059669;--warn:#b45309;--bad:#dc2626;color-scheme:light}
+*{box-sizing:border-box;margin:0}
+body{background:var(--bg);color:var(--text);font:13px/1.4 system-ui,sans-serif;height:100dvh;display:grid;grid-template:"top top" minmax(48px,auto) "nav main" 1fr "stat stat" 28px/172px minmax(0,1fr);overflow:hidden}
+header{grid-area:top;display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:8px 14px;background:var(--panel);border-bottom:1px solid var(--line)}
+header strong{font-size:15px;margin-right:6px}header .grow{flex:1}
+nav{grid-area:nav;display:flex;flex-direction:column;gap:2px;padding:10px 8px;background:var(--panel);border-right:1px solid var(--line)}
+main{grid-area:main;overflow:auto;min-width:0}
+footer{grid-area:stat;display:flex;gap:18px;align-items:center;padding:0 14px;background:var(--panel);border-top:1px solid var(--line);color:var(--mute);font-family:var(--mono);font-size:12px;overflow:hidden;white-space:nowrap}
+button,input{font:inherit;color:inherit}
+button{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;background:transparent;border:1px solid var(--line);border-radius:var(--radius);cursor:pointer}
+button:hover:not(:disabled){border-color:var(--accent)}button:disabled{opacity:.4;cursor:not-allowed}
+:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+nav button{border-color:transparent;color:var(--mute);justify-content:flex-start}
+nav button[aria-current=page]{color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
+input[type=text],input[type=password]{padding:6px 10px;background:var(--bg);border:1px solid var(--line);border-radius:var(--radius);min-width:0}
+input[aria-invalid=true]{border-color:var(--bad)}
+.pill{padding:2px 10px;border:1px solid var(--line);border-radius:99px;font-size:12px;color:var(--mute)}
+.pill.ok{color:var(--ok);border-color:var(--ok)}.pill.warn{color:var(--warn);border-color:var(--warn)}.pill.bad{color:var(--bad);border-color:var(--bad)}
+.mono{font-family:var(--mono)}.empty{padding:24px;color:var(--mute);text-align:center}
+#view-dashboard,#view-capture{padding:14px;display:grid;gap:14px;align-content:start}
+.cards,.panels{display:grid;gap:12px}.cards{grid-template-columns:repeat(auto-fit,minmax(130px,1fr))}.panels{grid-template-columns:repeat(auto-fit,minmax(290px,1fr))}
+.card,.panel,fieldset{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px}
+.card small{display:block;color:var(--mute)}.card b{font:600 22px var(--mono)}
+.panel h3,legend{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--mute);margin-bottom:8px}legend{padding:0 6px}
+.panel svg{width:100%;height:120px;display:block}.panel small{color:var(--mute)}
+.bar{display:grid;grid-template-columns:64px 1fr 56px;gap:8px;align-items:center;margin:4px 0;font-family:var(--mono);font-size:12px}
+.bar i{display:block;height:8px;border-radius:4px;background:var(--c)}.bar span:last-child{text-align:right}
+table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12px}td{padding:3px 4px;border-top:1px solid var(--line);overflow:hidden;text-overflow:ellipsis;max-width:180px;white-space:nowrap}td:last-child{text-align:right}
+#view-packets{display:flex;flex-direction:column;height:100%}
+#toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 14px;border-bottom:1px solid var(--line)}
+#filterInput{flex:1;min-width:220px;font-family:var(--mono)}#filterError{color:var(--bad);width:100%}
+#tableScroll{flex:1;min-height:120px;overflow:auto;position:relative}
+#tableHead{position:sticky;top:0;z-index:1;display:grid;grid-template-columns:var(--cols);min-width:1100px;border-left:3px solid transparent;background:var(--panel);border-bottom:1px solid var(--line)}
+#tableHead button{border:0;border-radius:0;padding:6px 8px;color:var(--mute);justify-content:flex-start}
+#tableHead button[aria-sort]::after{content:"";border:4px solid transparent;border-top-color:currentColor;margin-top:4px}
+#tableHead button[aria-sort=ascending]::after{border-top-color:transparent;border-bottom-color:currentColor;margin:-4px 0 0}
+#tableSpacer{position:relative;min-width:1100px}
+.row{position:absolute;left:0;right:0;height:var(--row);display:grid;grid-template-columns:var(--cols);align-items:center;border-left:3px solid var(--c);font:12px var(--mono);cursor:default}
+.row:hover{background:color-mix(in srgb,var(--accent) 6%,transparent)}.row.sel{background:color-mix(in srgb,var(--accent) 18%,transparent)}
+.row span{padding:0 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.row span:nth-child(7){color:var(--c);font-weight:600}
+#details{height:40%;min-height:90px;max-height:75%;resize:vertical;overflow:auto;border-top:1px solid var(--line);background:var(--panel);display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:10px 14px}
+#details details{margin-bottom:6px}#details summary{cursor:pointer;color:var(--accent);font-weight:600}
+dl{display:grid;grid-template-columns:max-content 1fr;gap:2px 14px;padding:4px 0 0 14px;font-family:var(--mono);font-size:12px}dt{color:var(--mute)}dd{word-break:break-all}
+pre{font:12px/1.5 var(--mono);overflow:auto}
+fieldset{display:flex;flex-wrap:wrap;gap:10px;align-items:center}fieldset p,fieldset label{flex-basis:100%}
+fieldset input[type=text],fieldset input[type=password]{flex:1;min-width:200px}
+@media(max-width:760px){body{grid-template:"top" auto "main" 1fr "nav" 52px "stat" 28px/minmax(0,1fr)}nav{flex-direction:row;border-right:0;border-top:1px solid var(--line);justify-content:space-around}nav span{display:none}#details{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <strong>PacketLens</strong>
+  <span id="status" class="pill"></span>
+  <span id="sourceLabel" class="pill"></span>
+  <span id="elapsed" class="mono" title="Elapsed capture time"></span>
+  <span class="grow"></span>
+  <button id="themeBtn" title="Toggle light / dark theme" aria-label="Toggle theme"></button>
+</header>
+<nav id="nav" aria-label="Views"></nav>
+<main>
+  <section id="view-dashboard" aria-label="Dashboard"></section>
+  <section id="view-packets" aria-label="Packet explorer" hidden>
+    <form id="toolbar" onsubmit="return false">
+      <input id="filterInput" type="text" spellcheck="false" autocomplete="off" aria-label="Display filter" placeholder="ip.addr==10.0.0.5 && tcp.flags.syn   ( / to focus )">
+      <button type="button" id="exportCsv" title="Export filtered packets as CSV">Export CSV</button>
+      <button type="button" id="exportJson" title="Export filtered packets and summary as JSON">Export report</button>
+      <small id="filterError" role="alert"></small>
+    </form>
+    <div id="tableScroll" tabindex="0" aria-label="Packet list"><div id="tableHead" role="row"></div><div id="tableSpacer" role="rowgroup"></div></div>
+    <aside id="details" aria-label="Packet details"></aside>
+  </section>
+  <section id="view-capture" aria-label="Capture" hidden>
+    <fieldset>
+      <legend>Offline analysis</legend>
+      <p>Browsers cannot sniff network interfaces. Import a capture file, or use the local bridge below for live traffic. Files are parsed in this tab and never uploaded.</p>
+      <input type="file" id="fileInput" accept=".pcap,.pcapng,.cap" aria-label="Import PCAP or PCAPNG">
+      <button type="button" id="demoBtn">Load simulated demo traffic</button>
+    </fieldset>
+    <fieldset>
+      <legend>Live capture (local bridge)</legend>
+      <p>Run <span class="mono">bridge.py</span> on the machine that owns the interface, then paste the token it prints. Stored packet bytes are truncated to 256 per packet.</p>
+      <input id="bridgeUrl" type="text" value="http://127.0.0.1:8787" aria-label="Bridge URL">
+      <input id="bridgeToken" type="password" autocomplete="off" placeholder="Token from bridge terminal" aria-label="Bridge token">
+      <label><input type="checkbox" id="consent"> I am authorized to capture on this network and understand packets may contain sensitive data.</label>
+      <button type="button" id="startBtn" disabled>Start</button>
+      <button type="button" id="pauseBtn" disabled>Pause</button>
+      <button type="button" id="stopBtn" disabled>Stop</button>
+      <p id="captureMessage" role="status"></p>
+    </fieldset>
+  </section>
+</main>
+<footer id="statusBar"></footer>
+<script>
+const $ = (selector) => document.querySelector(selector);
+const ROW_HEIGHT = 26, MAX_PACKETS = 250000, RAW_LIMIT = 256;
+const TCP_FLAGS = ['FIN', 'SYN', 'RST', 'PSH', 'ACK', 'URG'];
+const PROTO_COLORS = { TCP: '#22d3ee', UDP: '#34d399', DNS: '#fbbf24', HTTP: '#60a5fa', TLS: '#2dd4bf', ICMP: '#f87171', ARP: '#fb923c', IPv4: '#94a3b8', IPv6: '#94a3b8', Other: '#64748b' };
+const COLUMNS = [['n', 'No.'], ['time', 'Time'], ['src', 'Source'], ['sport', 'SPort'], ['dst', 'Destination'], ['dport', 'DPort'], ['proto', 'Proto'], ['len', 'Len'], ['flags', 'Flags'], ['info', 'Info']];
+const ICONS = { dashboard: 'M3 3h7v7H3zM14 3h7v4h-7zM14 10h7v11h-7zM3 14h7v7H3z', packets: 'M4 6h16M4 12h16M4 18h16', capture: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM10 8.5l5 3.5-5 3.5z', theme: 'M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z' };
+const icon = (name) => `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${ICONS[name]}"/></svg>`;
+const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const formatBytes = (n) => n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1048576).toFixed(1)} MB`;
+const bump = (map, key, by = 1) => map.set(key, (map.get(key) || 0) + by);
+const topEntries = (map, count = 5) => [...map].sort((a, b) => b[1] - a[1]).slice(0, count);
+
+const ipv4 = (b, o) => `${b[o]}.${b[o + 1]}.${b[o + 2]}.${b[o + 3]}`;
+const ipv6 = (b, o) => { const groups = []; for (let i = 0; i < 16; i += 2) groups.push(((b[o + i] << 8) | b[o + i + 1]).toString(16)); return groups.join(':').replace(/(^|:)0(:0)+(:|$)/, '::'); };
+const macAddress = (b, o) => Array.from(b.subarray(o, o + 6), (x) => x.toString(16).padStart(2, '0')).join(':');
+function dnsName(b, o) { const labels = []; while (o < b.length && b[o] && b[o] < 64 && labels.length < 10) { labels.push(String.fromCharCode(...b.subarray(o + 1, o + 1 + b[o]))); o += b[o] + 1; } return labels.join('.'); }
+
+function decodeFrame(bytes, linkType, ts, wireLen, n) {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const p = { n, ts, len: wireLen, raw: bytes.slice(0, RAW_LIMIT), proto: 'Other', src: '', dst: '', sport: '', dport: '', flags: '', info: '' };
+  try {
+    let off = 0, etherType;
+    if (linkType === 1) { p.mac = [macAddress(bytes, 6), macAddress(bytes, 0)]; etherType = view.getUint16(12); off = 14; }
+    else if (linkType === 113) { etherType = view.getUint16(14); off = 16; }
+    else if (linkType === 101) etherType = bytes[0] >> 4 === 6 ? 0x86dd : 0x0800;
+    else { p.info = `Unsupported link type ${linkType}`; return p; }
+    let l4Proto, l4Off;
+    if (etherType === 0x0800) { p.ipv = 4; p.proto = 'IPv4'; l4Proto = bytes[off + 9]; p.ttl = bytes[off + 8]; p.src = ipv4(bytes, off + 12); p.dst = ipv4(bytes, off + 16); l4Off = off + (bytes[off] & 15) * 4; }
+    else if (etherType === 0x86dd) { p.ipv = 6; p.proto = 'IPv6'; l4Proto = bytes[off + 6]; p.ttl = bytes[off + 7]; p.src = ipv6(bytes, off + 8); p.dst = ipv6(bytes, off + 24); l4Off = off + 40; }
+    else if (etherType === 0x0806) { p.proto = 'ARP'; p.src = ipv4(bytes, off + 14); p.dst = ipv4(bytes, off + 24); p.info = view.getUint16(off + 6) === 1 ? `Who has ${p.dst}? Tell ${p.src}` : `${p.src} is at ${macAddress(bytes, off + 8)}`; return p; }
+    else { p.info = `EtherType 0x${etherType.toString(16)}`; return p; }
+    let appOff = -1;
+    if (l4Proto === 6) {
+      p.l4 = p.proto = 'TCP'; p.sport = view.getUint16(l4Off); p.dport = view.getUint16(l4Off + 2); p.seq = view.getUint32(l4Off + 4); p.ack = view.getUint32(l4Off + 8);
+      const flagBits = bytes[l4Off + 13]; p.flags = TCP_FLAGS.filter((_, i) => flagBits & (1 << i)).join(','); p.win = view.getUint16(l4Off + 14);
+      appOff = l4Off + (bytes[l4Off + 12] >> 4) * 4;
+      p.info = `${p.sport} → ${p.dport} [${p.flags}] Seq=${p.seq} Win=${p.win} Len=${Math.max(0, wireLen - appOff)}`;
+    } else if (l4Proto === 17) {
+      p.l4 = p.proto = 'UDP'; p.sport = view.getUint16(l4Off); p.dport = view.getUint16(l4Off + 2); appOff = l4Off + 8;
+      p.info = `${p.sport} → ${p.dport} Len=${view.getUint16(l4Off + 4) - 8}`;
+    } else if (l4Proto === 1 || l4Proto === 58) {
+      const names = l4Proto === 1 ? { 0: 'Echo reply', 3: 'Destination unreachable', 8: 'Echo request', 11: 'Time exceeded' } : { 128: 'Echo request', 129: 'Echo reply' };
+      p.l4 = p.proto = 'ICMP'; p.info = `${l4Proto === 58 ? 'ICMPv6' : 'ICMP'} ${names[bytes[l4Off]] || `type ${bytes[l4Off]}`}`;
+    }
+    if (appOff > 0 && appOff < bytes.length) {
+      const payload = bytes.subarray(appOff);
+      const text = String.fromCharCode(...payload.subarray(0, 64));
+      if (p.l4 === 'UDP' && (p.sport === 53 || p.dport === 53) && payload.length >= 12) { p.proto = 'DNS'; p.info = `${payload[2] >> 7 ? 'Response' : 'Query'} 0x${((payload[0] << 8) | payload[1]).toString(16)} ${dnsName(payload, 12)}`; }
+      else if (p.l4 === 'TCP' && /^(GET|POST|PUT|DELETE|HEAD|OPTIONS|PATCH) \S|^HTTP\/1\./.test(text)) { p.proto = 'HTTP'; p.info = text.split('\r\n')[0]; }
+      else if (p.l4 === 'TCP' && payload.length >= 5 && payload[0] >= 20 && payload[0] <= 23 && payload[1] === 3 && payload[2] <= 4) { p.proto = 'TLS'; p.info = { 20: 'Change Cipher Spec', 21: 'Alert', 22: 'Handshake', 23: 'Application Data' }[payload[0]]; }
+    }
+  } catch { p.malformed = true; p.info = `Malformed or truncated packet. ${p.info}`.trim(); }
+  return p;
+}
+
+class CaptureReader {
+  constructor(onPacket) { this.onPacket = onPacket; this.buf = new Uint8Array(0); this.format = null; this.little = true; this.nano = false; this.linkType = 1; this.links = []; this.count = 0; }
+  feed(chunk) {
+    const merged = new Uint8Array(this.buf.length + chunk.length); merged.set(this.buf); merged.set(chunk, this.buf.length); this.buf = merged;
+    let pos = 0, next;
+    while ((next = this.step(pos)) >= 0) pos = next;
+    this.buf = this.buf.subarray(pos);
+  }
+  emit(bytes, linkType, ts, wireLen) { this.onPacket(decodeFrame(bytes, linkType, ts, wireLen, ++this.count)); }
+  step(pos) {
+    const b = this.buf, avail = b.length - pos;
+    if (avail < 24) return -1;
+    const dv = new DataView(b.buffer, b.byteOffset + pos, avail);
+    if (!this.format) {
+      const magic = dv.getUint32(0, true);
+      if (magic === 0x0a0d0d0a) this.format = 'pcapng';
+      else if ([0xa1b2c3d4, 0xa1b23c4d, 0xd4c3b2a1, 0x4d3cb2a1].includes(magic)) { this.format = 'pcap'; this.little = magic === 0xa1b2c3d4 || magic === 0xa1b23c4d; this.nano = magic === 0xa1b23c4d || magic === 0x4d3cb2a1; this.linkType = dv.getUint32(20, this.little); return pos + 24; }
+      else throw new Error('Not a PCAP or PCAPNG capture.');
+    }
+    if (this.format === 'pcap') {
+      const captured = dv.getUint32(8, this.little);
+      if (avail < 16 + captured) return -1;
+      const ts = dv.getUint32(0, this.little) * 1000 + dv.getUint32(4, this.little) / (this.nano ? 1e6 : 1e3);
+      this.emit(b.subarray(pos + 16, pos + 16 + captured), this.linkType, ts, dv.getUint32(12, this.little));
+      return pos + 16 + captured;
+    }
+    if (dv.getUint32(0, true) === 0x0a0d0d0a) this.little = dv.getUint32(8, true) === 0x1a2b3c4d;
+    const type = dv.getUint32(0, this.little), length = dv.getUint32(4, this.little);
+    if (length < 12 || length % 4) throw new Error('Corrupt PCAPNG block.');
+    if (avail < length) return -1;
+    if (type === 1) this.links.push(dv.getUint16(8, this.little));
+    else if (type === 6) {
+      const ts = (dv.getUint32(12, this.little) * 4294967296 + dv.getUint32(16, this.little)) / 1000, captured = dv.getUint32(20, this.little);
+      this.emit(b.subarray(pos + 28, pos + 28 + captured), this.links[dv.getUint32(8, this.little)] ?? 1, ts, dv.getUint32(24, this.little));
+    }
+    return pos + length;
+  }
+}
+
+const newStats = () => ({ bytes: 0, proto: new Map(), l4: new Map(), src: new Map(), dst: new Map(), ports: new Map(), ips: new Set(), buckets: new Map(), lastBucket: 0 });
+const state = { packets: [], stats: newStats(), visible: [], selected: null, view: 'dashboard', filterFn: null, sortKey: 'n', sortDir: 1, status: 'Idle', source: '', kind: '', paused: false, startedAt: 0, stoppedAt: 0, viewerDropped: 0, skipped: 0, malformed: 0, abort: null };
+
+function ingest(p) {
+  if (state.paused) { state.skipped++; return; }
+  if (state.packets.length >= MAX_PACKETS) { state.viewerDropped++; return; }
+  const s = state.stats;
+  state.packets.push(p); s.bytes += p.len; bump(s.proto, p.proto);
+  if (p.l4) bump(s.l4, p.l4);
+  if (p.src) { bump(s.src, p.src); s.ips.add(p.src); }
+  if (p.dst) { bump(s.dst, p.dst); s.ips.add(p.dst); }
+  if (p.sport !== '') bump(s.ports, Math.min(p.sport, p.dport));
+  const bucket = Math.floor(p.ts / 1000); bump(s.buckets, bucket); s.lastBucket = Math.max(s.lastBucket, bucket);
+  if (p.malformed) state.malformed++;
+  scheduleRender();
+}
+
+function resetSession(label, kind) {
+  state.abort?.abort();
+  Object.assign(state, { packets: [], stats: newStats(), visible: [], selected: null, source: label, kind, paused: false, startedAt: Date.now(), stoppedAt: 0, viewerDropped: 0, skipped: 0, malformed: 0, abort: null });
+  $('#captureMessage').textContent = '';
+}
+function setStatus(status) { state.status = status; renderTop(); updateControls(); }
+const say = (message) => { $('#captureMessage').textContent = message; };
+
+const FIELDS = {
+  'ip.addr': (p) => [p.src, p.dst], 'ip.src': (p) => [p.src], 'ip.dst': (p) => [p.dst], 'port': (p) => [p.sport, p.dport],
+  'tcp.port': (p) => p.l4 === 'TCP' ? [p.sport, p.dport] : [], 'udp.port': (p) => p.l4 === 'UDP' ? [p.sport, p.dport] : [], 'frame.len': (p) => [p.len]
+};
+const COMPARE = { '==': (a, b) => a == b, '!=': (a, b) => a != b, '>': (a, b) => +a > +b, '<': (a, b) => +a < +b, '>=': (a, b) => +a >= +b, '<=': (a, b) => +a <= +b };
+const KNOWN_PROTOS = new Set(['tcp', 'udp', 'dns', 'http', 'tls', 'icmp', 'arp', 'ipv4', 'ipv6']);
+function compileTerm(raw) {
+  let term = raw.trim(), negate = false;
+  if (term.startsWith('!')) { negate = true; term = term.slice(1).trim(); }
+  const match = term.match(/^([\w.]+)\s*(==|!=|>=|<=|>|<)\s*(\S+)$/), lower = term.toLowerCase();
+  let test;
+  if (match) {
+    const [, field, op, value] = match, read = FIELDS[field];
+    if (!read) throw new Error(`Unknown field "${field}". Supported: ${Object.keys(FIELDS).join(', ')}, tcp.flags.<flag>`);
+    test = op === '!=' ? (p) => read(p).every((v) => COMPARE[op](v, value)) : (p) => read(p).some((v) => COMPARE[op](v, value));
+  } else if (/^tcp\.flags\.\w+$/.test(lower)) { const flag = lower.split('.')[2].toUpperCase(); if (!TCP_FLAGS.includes(flag)) throw new Error(`Unknown TCP flag "${flag}"`); test = (p) => p.flags.includes(flag); }
+  else if (KNOWN_PROTOS.has(lower)) test = (p) => p.proto.toLowerCase() === lower || p.l4?.toLowerCase() === lower;
+  else test = (p) => `${p.src} ${p.dst} ${p.proto} ${p.info}`.toLowerCase().includes(lower);
+  return negate ? (p) => !test(p) : test;
+}
+function compileFilter(expression) {
+  if (!expression.trim()) return null;
+  const groups = expression.split('||').map((group) => group.split('&&').map(compileTerm));
+  return (p) => groups.some((terms) => terms.every((test) => test(p)));
+}
+
+function recompute() {
+  const list = state.filterFn ? state.packets.filter(state.filterFn) : state.packets.slice();
+  if (state.sortKey !== 'n' || state.sortDir !== 1) {
+    const key = state.sortKey === 'time' ? 'ts' : state.sortKey, dir = state.sortDir;
+    list.sort((a, b) => (a[key] > b[key] ? 1 : a[key] < b[key] ? -1 : 0) * dir);
+  }
+  state.visible = list;
+}
+
+let renderTimer = 0;
+function scheduleRender() { if (!renderTimer) renderTimer = setTimeout(() => { renderTimer = 0; render(); }, 250); }
+function render() {
+  renderTop(); renderStatusBar();
+  if (state.view === 'dashboard') renderDashboard();
+  if (state.view === 'packets') { recompute(); renderRows(); $('#exportCsv').disabled = $('#exportJson').disabled = !state.visible.length; }
+}
+function renderTop() {
+  const tone = { Capturing: 'ok', Loaded: 'ok', Paused: 'warn', Loading: 'warn', Error: 'bad' }[state.status] || '';
+  $('#status').className = `pill ${tone}`; $('#status').textContent = state.status;
+  const label = $('#sourceLabel');
+  label.className = `pill ${state.kind === 'sim' ? 'warn' : ''}`;
+  label.textContent = { sim: 'SIMULATED DATA, NOT REAL TRAFFIC', file: `File: ${state.source}`, live: `Live: ${state.source}` }[state.kind] || 'No data source';
+  const seconds = state.startedAt ? Math.floor(((state.stoppedAt || Date.now()) - state.startedAt) / 1000) : 0;
+  $('#elapsed').textContent = [seconds / 3600, (seconds / 60) % 60, seconds % 60].map((v) => String(Math.floor(v)).padStart(2, '0')).join(':');
+}
+function renderStatusBar() {
+  $('#statusBar').innerHTML = `<span>Packets ${state.packets.length.toLocaleString()}</span><span>${formatBytes(state.stats.bytes)}</span><span title="Dropped by this viewer after ${MAX_PACKETS.toLocaleString()} packets">Viewer-dropped ${state.viewerDropped}</span><span>Skipped while paused ${state.skipped}</span><span>Malformed ${state.malformed}</span><span>${esc(state.status)}</span>`;
+}
+
+function trafficChart(s) {
+  if (!s.buckets.size) return '<p class="empty">No traffic yet. Import a file or load demo data from Capture.</p>';
+  const width = 600, height = 120, counts = [];
+  for (let b = s.lastBucket - 119; b <= s.lastBucket; b++) counts.push(s.buckets.get(b) || 0);
+  const max = Math.max(...counts, 1);
+  const points = counts.map((c, i) => `${(i / 119 * width).toFixed(1)},${(height - 2 - c / max * (height - 8)).toFixed(1)}`).join(' ');
+  return `<svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="Packets per second over the last 120 seconds"><polyline points="0,${height} ${points} ${width},${height}" fill="var(--accent)" fill-opacity=".15" stroke="var(--accent)" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><small>Peak ${max} pkt/s, last 120 s</small>`;
+}
+const listPanel = (title, entries) => `<article class="panel"><h3>${title}</h3>${entries.length ? `<table>${entries.map(([k, v]) => `<tr><td>${esc(k)}</td><td>${v.toLocaleString()}</td></tr>`).join('')}</table>` : '<p class="empty">No data</p>'}</article>`;
+function renderDashboard() {
+  const s = state.stats, count = (map, key) => (map.get(key) || 0).toLocaleString();
+  const cards = [['Packets', state.packets.length.toLocaleString()], ['Data transferred', formatBytes(s.bytes)], ['Packets/s (latest)', s.buckets.get(s.lastBucket - 1) || 0], ['Unique IPs', s.ips.size], ['TCP', count(s.l4, 'TCP')], ['UDP', count(s.l4, 'UDP')], ['DNS', count(s.proto, 'DNS')], ['ICMP', count(s.l4, 'ICMP')]];
+  const protoTotal = state.packets.length || 1;
+  const bars = topEntries(s.proto, 8).map(([name, n]) => `<div class="bar" style="--c:${PROTO_COLORS[name] || PROTO_COLORS.Other}"><span>${esc(name)}</span><i style="width:${(n / protoTotal * 100).toFixed(1)}%"></i><span>${n}</span></div>`).join('') || '<p class="empty">No data</p>';
+  const recent = state.packets.slice(-8).reverse().map((p) => `<tr><td>${p.n}</td><td>${esc(p.src)}</td><td>${esc(p.dst)}</td><td style="color:${PROTO_COLORS[p.proto] || PROTO_COLORS.Other}">${esc(p.proto)}</td><td>${p.len}</td></tr>`).join('');
+  $('#view-dashboard').innerHTML = `<div class="cards">${cards.map(([label, value]) => `<article class="card"><small>${label}</small><b>${value}</b></article>`).join('')}</div>
+  <div class="panels"><article class="panel"><h3>Traffic over time</h3>${trafficChart(s)}</article><article class="panel"><h3>Protocol distribution</h3>${bars}</article></div>
+  <div class="panels">${listPanel('Top source IPs', topEntries(s.src))}${listPanel('Top destination IPs', topEntries(s.dst))}${listPanel('Most-used ports', topEntries(s.ports))}</div>
+  <article class="panel"><h3>Recent packets</h3>${recent ? `<table>${recent}</table>` : '<p class="empty">No packets yet</p>'}</article>`;
+}
+
+function renderHead() {
+  $('#tableHead').innerHTML = COLUMNS.map(([key, label]) => `<button type="button" data-key="${key}" ${state.sortKey === key ? `aria-sort="${state.sortDir > 0 ? 'ascending' : 'descending'}"` : ''} title="Sort by ${label}">${label}</button>`).join('');
+}
+function renderRows() {
+  const scroll = $('#tableScroll'), spacer = $('#tableSpacer'), rows = state.visible, first = state.packets[0]?.ts || 0;
+  if (!rows.length) { spacer.style.height = 'auto'; spacer.innerHTML = `<p class="empty">${state.packets.length ? 'No packets match the filter.' : 'No packets loaded. Use Capture to import a file or load demo data.'}</p>`; return; }
+  spacer.style.height = `${rows.length * ROW_HEIGHT}px`;
+  const start = Math.max(0, Math.floor(scroll.scrollTop / ROW_HEIGHT) - 5), end = Math.min(rows.length, start + Math.ceil(scroll.clientHeight / ROW_HEIGHT) + 10), html = [];
+  for (let i = start; i < end; i++) {
+    const p = rows[i], cells = [p.n, ((p.ts - first) / 1000).toFixed(6), p.src, p.sport, p.dst, p.dport, p.proto, p.len, p.flags, p.info];
+    html.push(`<div class="row${p === state.selected ? ' sel' : ''}" role="row" data-i="${i}" style="top:${i * ROW_HEIGHT}px;--c:${PROTO_COLORS[p.proto] || PROTO_COLORS.Other}">${cells.map((c) => `<span>${esc(c)}</span>`).join('')}</div>`);
+  }
+  spacer.innerHTML = html.join('');
+}
+function describe(p) {
+  const layers = [['Frame', [['Number', p.n], ['Time', new Date(p.ts).toISOString()], ['Length on wire', `${p.len} bytes`], ['Bytes stored', p.raw ? p.raw.length : 0], ['Origin', p.sim ? 'Simulated record' : 'Parsed capture']]]];
+  if (p.mac) layers.push(['Ethernet', [['Source', p.mac[0]], ['Destination', p.mac[1]]]]);
+  if (p.ipv) layers.push([`IPv${p.ipv}`, [['Source', p.src], ['Destination', p.dst], ['TTL / hop limit', p.ttl ?? 'n/a']]]);
+  if (p.l4 === 'TCP') layers.push(['TCP', [['Ports', `${p.sport} → ${p.dport}`], ['Flags', p.flags || 'none'], ['Sequence', p.seq ?? 'n/a'], ['Acknowledgment', p.ack ?? 'n/a'], ['Window', p.win ?? 'n/a']]]);
+  if (p.l4 === 'UDP') layers.push(['UDP', [['Ports', `${p.sport} → ${p.dport}`]]]);
+  layers.push([p.l4 && p.l4 !== p.proto ? `Application: ${p.proto}` : p.proto, [['Summary', p.info]]]);
+  return layers;
+}
+function hexDump(raw) {
+  if (!raw) return 'No raw bytes: this record is simulated.';
+  const lines = [];
+  for (let o = 0; o < raw.length; o += 16) {
+    const chunk = raw.subarray(o, o + 16);
+    lines.push(`${o.toString(16).padStart(4, '0')}  ${Array.from(chunk, (b) => b.toString(16).padStart(2, '0')).join(' ').padEnd(47)}  ${Array.from(chunk, (b) => b >= 32 && b < 127 ? String.fromCharCode(b) : '.').join('')}`);
+  }
+  return lines.join('\n');
+}
+function renderDetails() {
+  const p = state.selected;
+  if (!p) { $('#details').innerHTML = '<p class="empty">Select a packet (click, or arrow keys) to inspect its layers and raw bytes.</p>'; return; }
+  $('#details').innerHTML = `<section>${describe(p).map(([title, fields]) => `<details open><summary>${esc(title)}</summary><dl>${fields.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl></details>`).join('')}</section><pre aria-label="Hex and ASCII dump">${esc(hexDump(p.raw))}</pre>`;
+}
+function selectPacket(p) { state.selected = p; renderRows(); renderDetails(); }
+
+function setView(view) {
+  state.view = view;
+  for (const name of ['dashboard', 'packets', 'capture']) $(`#view-${name}`).hidden = name !== view;
+  document.querySelectorAll('#nav button').forEach((button) => button.toggleAttribute('aria-current', button.dataset.view === view) || button.removeAttribute('aria-current'));
+  document.querySelectorAll('#nav button[aria-current]').forEach((button) => button.setAttribute('aria-current', 'page'));
+  render(); if (view === 'packets') renderDetails();
+}
+
+function updateControls() {
+  const running = state.status === 'Capturing' || state.status === 'Paused';
+  $('#startBtn').disabled = running || !$('#consent').checked || !$('#bridgeToken').value;
+  $('#pauseBtn').disabled = !running; $('#pauseBtn').textContent = state.paused ? 'Resume' : 'Pause'; $('#stopBtn').disabled = !running;
+}
+async function startLive() {
+  const base = $('#bridgeUrl').value.replace(/\/$/, '');
+  resetSession(base, 'live');
+  const controller = state.abort = new AbortController(), parser = new CaptureReader(ingest);
+  setStatus('Capturing');
+  try {
+    const response = await fetch(`${base}/stream?token=${encodeURIComponent($('#bridgeToken').value)}`, { signal: controller.signal });
+    if (!response.ok) throw new Error(response.status === 403 ? 'Bridge rejected the token.' : `Bridge returned HTTP ${response.status}.`);
+    const reader = response.body.getReader();
+    for (;;) { const { done, value } = await reader.read(); if (done) break; parser.feed(value); }
+    say('Bridge closed the stream. If no packets arrived, check the bridge terminal for tcpdump errors.'); setStatus('Stopped');
+  } catch (error) {
+    if (error.name === 'AbortError') { if (state.abort === controller) setStatus('Stopped'); return; }
+    say(`${error.message} Is bridge.py running, and is the URL reachable from this browser?`); setStatus('Error');
+  }
+  state.stoppedAt = Date.now(); render();
+}
+async function importFile(file) {
+  resetSession(file.name, 'file'); setStatus('Loading');
+  const parser = new CaptureReader(ingest);
+  try {
+    const reader = file.stream().getReader();
+    for (;;) { const { done, value } = await reader.read(); if (done) break; parser.feed(value); await new Promise((resolve) => setTimeout(resolve)); }
+    setStatus('Loaded'); say(`Parsed ${parser.count.toLocaleString()} packets from ${file.name}.`);
+  } catch (error) { setStatus('Error'); say(error.message); }
+  state.stoppedAt = Date.now(); render();
+}
+function loadDemo() {
+  resetSession('demo', 'sim');
+  const hosts = ['10.0.0.5', '10.0.0.12', '192.168.1.20', '93.184.216.34', '1.1.1.1', '142.250.74.46'];
+  const kinds = [
+    { proto: 'TLS', l4: 'TCP', dport: 443, flags: 'ACK,PSH', info: 'Application Data', big: true }, { proto: 'TLS', l4: 'TCP', dport: 443, flags: 'ACK,PSH', info: 'Handshake', big: false },
+    { proto: 'TCP', l4: 'TCP', dport: 443, flags: 'ACK', info: 'ACK' }, { proto: 'TCP', l4: 'TCP', dport: 22, flags: 'SYN', info: 'SYN' },
+    { proto: 'DNS', l4: 'UDP', dport: 53, flags: '', info: 'Query 0x1a2b example.com' }, { proto: 'HTTP', l4: 'TCP', dport: 80, flags: 'ACK,PSH', info: 'GET /index.html HTTP/1.1' },
+    { proto: 'ICMP', l4: 'ICMP', flags: '', info: 'ICMP Echo request' }, { proto: 'ARP', flags: '', info: 'Who has 192.168.1.1? Tell 192.168.1.20' }
+  ];
+  const pick = (list) => list[Math.floor(Math.random() * list.length)];
+  let ts = Date.now() - 90000;
+  for (let n = 1; n <= 700; n++) {
+    ts += Math.random() * 200; const kind = pick(kinds), isNet = !!kind.l4;
+    ingest({ n, ts, sim: true, raw: null, proto: kind.proto, l4: kind.l4, ipv: kind.proto === 'ARP' ? undefined : 4, src: pick(hosts), dst: pick(hosts), sport: isNet && kind.l4 !== 'ICMP' ? 1024 + Math.floor(Math.random() * 60000) : '', dport: kind.dport ?? '', flags: kind.flags, info: kind.info, len: kind.big ? 200 + Math.floor(Math.random() * 1300) : 60 + Math.floor(Math.random() * 60), ttl: 64 });
+  }
+  setStatus('Loaded'); state.stoppedAt = Date.now(); say('Loaded 700 simulated records. They are not real traffic and carry no raw bytes.'); render();
+}
+
+function download(name, type, text) { const url = URL.createObjectURL(new Blob([text], { type })); const link = document.createElement('a'); link.href = url; link.download = name; link.click(); URL.revokeObjectURL(url); }
+const csvCell = (value) => { let text = String(value ?? ''); if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`; return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text; };
+function exportCsv() {
+  const header = 'number,time,source,source_port,destination,destination_port,protocol,length,flags,info,simulated';
+  const lines = state.visible.map((p) => [p.n, new Date(p.ts).toISOString(), p.src, p.sport, p.dst, p.dport, p.proto, p.len, p.flags, p.info, !!p.sim].map(csvCell).join(','));
+  download('packets.csv', 'text/csv', [header, ...lines].join('\n'));
+}
+function exportReport() {
+  const s = state.stats, strip = ({ raw, ...rest }) => rest;
+  download('report.json', 'application/json', JSON.stringify({ source: state.source, simulated: state.kind === 'sim', exportedAt: new Date().toISOString(), filter: $('#filterInput').value, summary: { packets: state.packets.length, bytes: s.bytes, uniqueIps: s.ips.size, protocols: Object.fromEntries(s.proto), topSources: topEntries(s.src, 10), topDestinations: topEntries(s.dst, 10), topPorts: topEntries(s.ports, 10) }, packets: state.visible.map(strip) }, null, 2));
+}
+
+$('#nav').innerHTML = [['dashboard', 'Dashboard'], ['packets', 'Packets'], ['capture', 'Capture']].map(([view, label], i) => `<button type="button" data-view="${view}" title="${label} (${i + 1})">${icon(view)}<span>${label}</span></button>`).join('');
+$('#nav').addEventListener('click', (e) => { const button = e.target.closest('button'); if (button) setView(button.dataset.view); });
+$('#themeBtn').innerHTML = icon('theme');
+$('#themeBtn').addEventListener('click', () => { const root = document.documentElement; root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark'; });
+$('#filterInput').addEventListener('input', (e) => {
+  try { state.filterFn = compileFilter(e.target.value); $('#filterError').textContent = ''; e.target.removeAttribute('aria-invalid'); }
+  catch (error) { $('#filterError').textContent = error.message; e.target.setAttribute('aria-invalid', 'true'); return; }
+  $('#tableScroll').scrollTop = 0; render();
+});
+$('#tableHead').addEventListener('click', (e) => { const key = e.target.closest('button')?.dataset.key; if (!key) return; state.sortDir = state.sortKey === key ? -state.sortDir : 1; state.sortKey = key; renderHead(); render(); });
+$('#tableSpacer').addEventListener('click', (e) => { const row = e.target.closest('.row'); if (row) selectPacket(state.visible[+row.dataset.i]); });
+$('#tableScroll').addEventListener('scroll', () => requestAnimationFrame(renderRows));
+addEventListener('resize', () => state.view === 'packets' && renderRows());
+$('#exportCsv').addEventListener('click', exportCsv);
+$('#exportJson').addEventListener('click', exportReport);
+$('#fileInput').addEventListener('change', (e) => { const file = e.target.files[0]; if (file) importFile(file); e.target.value = ''; });
+$('#demoBtn').addEventListener('click', loadDemo);
+$('#consent').addEventListener('change', updateControls);
+$('#bridgeToken').addEventListener('input', updateControls);
+$('#startBtn').addEventListener('click', startLive);
+$('#stopBtn').addEventListener('click', () => state.abort?.abort());
+const togglePause = () => { if (state.status !== 'Capturing' && state.status !== 'Paused') return; state.paused = !state.paused; setStatus(state.paused ? 'Paused' : 'Capturing'); };
+$('#pauseBtn').addEventListener('click', togglePause);
+addEventListener('keydown', (e) => {
+  if (e.target.matches('input')) { if (e.key === 'Escape') e.target.blur(); return; }
+  if (e.key === '/') { e.preventDefault(); setView('packets'); $('#filterInput').focus(); }
+  else if (e.key === 'p') togglePause();
+  else if (['1', '2', '3'].includes(e.key)) setView(['dashboard', 'packets', 'capture'][+e.key - 1]);
+  else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && state.view === 'packets' && state.visible.length) {
+    e.preventDefault();
+    const index = Math.min(state.visible.length - 1, Math.max(0, state.visible.indexOf(state.selected) + (e.key === 'ArrowDown' ? 1 : -1)));
+    const scroll = $('#tableScroll'), top = index * ROW_HEIGHT;
+    if (top < scroll.scrollTop) scroll.scrollTop = top; else if (top + ROW_HEIGHT * 2 > scroll.scrollTop + scroll.clientHeight) scroll.scrollTop = top - scroll.clientHeight + ROW_HEIGHT * 2;
+    selectPacket(state.visible[index]);
+  }
+});
+setInterval(renderTop, 1000);
+renderHead(); updateControls(); setView('dashboard');
+</script>
+</body>
+</html>
