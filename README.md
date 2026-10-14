@@ -13,7 +13,7 @@ Only analyze networks you own or are authorized to monitor. Packets can contain 
 
 ### A. Analyze a capture file (works everywhere)
 
-1. Open `index.html` in a browser, or host it (see "Hosting").
+1. Open browser.
 2. Go to **Capture** in the sidebar and choose **Import PCAP / PCAPNG**.
 3. Go to **Packets** to inspect, or **Dashboard** for statistics.
 
@@ -48,11 +48,6 @@ The bridge picks your default-route interface. To choose another: `python3 bridg
 - Without root, Android blocks raw sockets and live capture will fail. Use file import (section A).
 - With root: `pkg install python tcpdump tsu`, copy both files to one folder, then `tsu` and `python3 bridge.py -i wlan0`. Open the printed address in the phone browser.
 
-## Hosting the interface (Vercel / GitHub Pages)
-
-- **Vercel:** push the folder to a repo, import it, framework preset "Other". Or run `vercel --prod`.
-- **GitHub Pages:** push `index.html` and enable Pages for the branch.
-- Hosted copies are good for file analysis. For live capture, run the interface from the bridge (section B), because a browser blocks an HTTPS page from talking to a plain-HTTP bridge on another machine, and Safari blocks even localhost.
 
 ## Using the interface
 
